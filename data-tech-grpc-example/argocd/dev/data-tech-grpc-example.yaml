@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: data-tech-grpc-example
+  namespace: argocd
+  annotations:
+    notifications.argoproj.io/subscribe.sync-operation-change.slack: dev-data-argocd-deployments
+spec:
+  project: collect
+  source:
+    repoURL: https://chartmuseum.dev.esgbook.com
+    chart: data-tech-grpc-example
+    # Overwritten in CI, but we need a default here
+    targetRevision: 2.2.0
+    helm:
+      version: v3
+      parameters:
+        # Overwritten in CI, but we need a default here
+        - name: image.tag
+          value: develop
+      valueFiles:
+        - values.yaml
+        - "values.dev.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: collect-cicd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - Validate=true
+      - CreateNamespace=false
+      - PruneLast=true

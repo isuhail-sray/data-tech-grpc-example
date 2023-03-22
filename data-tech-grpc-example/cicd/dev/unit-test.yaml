@@ -1,0 +1,102 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: github-test
+  namespace: collect-cicd
+  annotations:
+    cicdEvent: pull-request
+spec:
+  serviceAccountName: workflow-operator
+  entrypoint: pytest
+  onExit: exit-handler
+  arguments:
+    parameters:
+      - name: gitRepoName
+        value: default
+      - name: shortCommitSha
+        value: default
+      - name: domain
+        value: collect
+      - name: githubCheckName
+        value: pytest
+  templates:
+    - name: pytest
+      inputs:
+        parameters:
+          - name: gitRepoName
+          - name: shortCommitSha
+          - name: domain
+          - name: githubCheckName
+          - name: pythonImageTag
+            value: "3.11"
+          - name: pypiArtifactRegistryUrl
+            value: europe-python.pkg.dev/esgbook-develop/data-pypi/simple
+          - name: pytestArgs
+            value: "-v tests"
+          - name: requirementsFileName
+            value: requirements.txt
+      steps:
+        - - name: argo-ci-notify-github-start
+            templateRef:
+              name: argo-ci-notify-github
+              template: start
+            arguments:
+              parameters:
+                - name: repo
+                  value: "{{inputs.parameters.gitRepoName}}"
+                - name: commitSha
+                  value: "{{inputs.parameters.shortCommitSha}}"
+                - name: domain
+                  value: "{{inputs.parameters.domain}}"
+                - name: workflow
+                  value: "{{workflow.name}}"
+                - name: githubCheckName
+                  value: "{{inputs.parameters.githubCheckName}}"
+        - - name: generate-access-token
+            templateRef:
+              name: auth
+              template: generate-access-token
+        - - name: pytest
+            templateRef:
+              name: unit-test-python
+              template: pytest
+            arguments:
+              parameters:
+                - name: gitRepoName
+                  value: "{{inputs.parameters.gitRepoName}}"
+                - name: shortCommitSha
+                  value: "{{inputs.parameters.shortCommitSha}}"
+                - name: pythonImageTag
+                  value: "{{inputs.parameters.pythonImageTag}}"
+                - name: pipInstallArgs
+                  value: "--extra-index-url https://oauth2accesstoken:{{steps.generate-access-token.outputs.parameters.accessToken}}@{{inputs.parameters.pypiArtifactRegistryUrl}}"
+                - name: pytestArgs
+                  value: "{{inputs.parameters.pytestArgs}}"
+                - name: requirementsFileName
+                  value: "{{inputs.parameters.requirementsFileName}}"
+    - name: exit-handler
+      inputs:
+        parameters:
+          - name: gitRepoName
+          - name: shortCommitSha
+          - name: domain
+          - name: githubCheckName
+      steps:
+        - - name: argo-ci-notify-github-end
+            templateRef:
+              name: argo-ci-notify-github
+              template: end
+            arguments:
+              parameters:
+                - name: repo
+                  value: "{{inputs.parameters.gitRepoName}}"
+                - name: githubCheckName
+                  value: "{{inputs.parameters.githubCheckName}}"
+                - name: commitSha
+                  value: "{{inputs.parameters.shortCommitSha}}"
+                - name: domain
+                  value: "{{inputs.parameters.domain}}"
+                - name: workflow
+                  value: "{{workflow.name}}"
+                - name: conclusion
+                  value: "{{workflow.status}}"

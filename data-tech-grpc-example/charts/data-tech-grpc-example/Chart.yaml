@@ -1,0 +1,4 @@
+apiVersion: v1
+description: A Helm chart to deploy the data-tech-grpc-example.
+name: data-tech-grpc-example
+version: 0.0.1

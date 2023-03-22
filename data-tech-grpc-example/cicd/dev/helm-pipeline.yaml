@@ -1,0 +1,100 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: helm-pipeline
+  namespace: collect-cicd
+  annotations:
+    cicdEvent: push
+spec:
+  serviceAccountName: workflow-operator
+  entrypoint: pipeline
+  onExit: exit-handler
+  arguments:
+    parameters:
+      - name: gitRepoName
+        value: default
+      - name: branchName
+        value: default
+      - name: shortCommitSha
+        value: default
+      - name: githubCheckName
+        value: helm-pipeline
+      - name: chartName
+        value: data-tech-grpc-example
+      - name: domain
+        value: collect
+      - name: dockerFile
+        value: Dockerfile
+      - name: dockerContext
+        value: "."
+      - name: dockerBuildArgs
+        value: --build-arg AUTHED_ARTIFACT_REGISTRY_URL=https://oauth2accesstoken:$(gcloud auth print-access-token)@europe-python.pkg.dev/esgbook-develop/data-pypi/simple
+  templates:
+    - name: pipeline
+      inputs:
+        parameters:
+          - name: githubCheckName
+          - name: gitRepoName
+          - name: domain
+          - name: branchName
+          - name: shortCommitSha
+          - name: dockerFile
+          - name: dockerContext
+          - name: dockerBuildArgs
+          - name: chartName
+      steps:
+        - - name: pipeline
+            templateRef:
+              name: pipeline-helm
+              template: pipeline-helm
+            arguments:
+              parameters:
+                - name: githubCheckName
+                  value: "{{inputs.parameters.githubCheckName}}"
+                - name: gitRepoName
+                  value: "{{inputs.parameters.gitRepoName}}"
+                - name: domain
+                  value: "{{inputs.parameters.domain}}"
+                - name: branchName
+                  value: "{{inputs.parameters.branchName}}"
+                - name: shortCommitSha
+                  value: "{{inputs.parameters.shortCommitSha}}"
+                - name: dockerRepoName
+                  value: "{{inputs.parameters.domain}}"
+                - name: dockerImageName
+                  value: "{{inputs.parameters.gitRepoName}}"
+                - name: dockerFile
+                  value: "{{inputs.parameters.dockerFile}}"
+                - name: dockerContext
+                  value: "{{inputs.parameters.dockerContext}}"
+                - name: dockerBuildArgs
+                  value: "{{inputs.parameters.dockerBuildArgs}}"
+                - name: chartName
+                  value: "{{inputs.parameters.chartName}}"
+
+    - name: exit-handler
+      inputs:
+        parameters:
+          - name: gitRepoName
+          - name: shortCommitSha
+          - name: domain
+          - name: githubCheckName
+      steps:
+        - - name: argo-ci-notify-github-end
+            templateRef:
+              name: argo-ci-notify-github
+              template: end
+            arguments:
+              parameters:
+                - name: repo
+                  value: "{{inputs.parameters.gitRepoName}}"
+                - name: githubCheckName
+                  value: "{{inputs.parameters.githubCheckName}}"
+                - name: commitSha
+                  value: "{{inputs.parameters.shortCommitSha}}"
+                - name: domain
+                  value: "{{inputs.parameters.domain}}"
+                - name: workflow
+                  value: "{{workflow.name}}"
+                - name: conclusion
+                  value: "{{workflow.status}}"
